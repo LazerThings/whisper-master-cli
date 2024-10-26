@@ -61,3 +61,15 @@ whisper -i audio.mp3 -o ~/transcripts -l french -cls
 # Show help with full language list
 whisper --help
 ```
+### Supported Languages
+```shell
+albanian, arabic, armenian, azerbaijani, basque, bengali, bosnian,
+  breton, bulgarian, catalan, chinese, croatian, czech, danish, dutch,
+  english, estonian, finnish, french, german, greek, hebrew, hindi,
+  hungarian, icelandic, indonesian, italian, japanese, kannada,
+  kazakh, korean, latin, latvian, lithuanian, macedonian, malay,
+  malayalam, maori, mongolian, nepali, norwegian, persian, polish,
+  portuguese, romanian, russian, serbian, slovak, slovenian, spanish,
+  swahili, swedish, tamil, telugu, thai, turkish, ukrainian, urdu,
+  vietnamese, welsh
+```
