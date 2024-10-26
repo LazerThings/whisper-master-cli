@@ -10,9 +10,73 @@ import logging
 import numpy as np
 import soundfile as sf
 from typing import List, Tuple
+from tqdm import tqdm
+import textwrap
+
+LANGUAGE_CODES = {
+    "english": "en", "en": "en",
+    "chinese": "zh", "zh": "zh",
+    "german": "de", "de": "de",
+    "spanish": "es", "es": "es",
+    "russian": "ru", "ru": "ru",
+    "korean": "ko", "ko": "ko",
+    "french": "fr", "fr": "fr",
+    "japanese": "ja", "ja": "ja",
+    "portuguese": "pt", "pt": "pt",
+    "turkish": "tr", "tr": "tr",
+    "polish": "pl", "pl": "pl",
+    "catalan": "ca", "ca": "ca",
+    "dutch": "nl", "nl": "nl",
+    "arabic": "ar", "ar": "ar",
+    "swedish": "sv", "sv": "sv",
+    "italian": "it", "it": "it",
+    "indonesian": "id", "id": "id",
+    "hindi": "hi", "hi": "hi",
+    "finnish": "fi", "fi": "fi",
+    "vietnamese": "vi", "vi": "vi",
+    "hebrew": "he", "he": "he",
+    "ukrainian": "uk", "uk": "uk",
+    "greek": "el", "el": "el",
+    "malay": "ms", "ms": "ms",
+    "czech": "cs", "cs": "cs",
+    "romanian": "ro", "ro": "ro",
+    "danish": "da", "da": "da",
+    "hungarian": "hu", "hu": "hu",
+    "tamil": "ta", "ta": "ta",
+    "norwegian": "no", "no": "no",
+    "thai": "th", "th": "th",
+    "urdu": "ur", "ur": "ur",
+    "croatian": "hr", "hr": "hr",
+    "bulgarian": "bg", "bg": "bg",
+    "lithuanian": "lt", "lt": "lt",
+    "latin": "la", "la": "la",
+    "maori": "mi", "mi": "mi",
+    "malayalam": "ml", "ml": "ml",
+    "welsh": "cy", "cy": "cy",
+    "slovak": "sk", "sk": "sk",
+    "telugu": "te", "te": "te",
+    "persian": "fa", "fa": "fa",
+    "latvian": "lv", "lv": "lv",
+    "bengali": "bn", "bn": "bn",
+    "serbian": "sr", "sr": "sr",
+    "azerbaijani": "az", "az": "az",
+    "slovenian": "sl", "sl": "sl",
+    "kannada": "kn", "kn": "kn",
+    "estonian": "et", "et": "et",
+    "macedonian": "mk", "mk": "mk",
+    "breton": "br", "br": "br",
+    "basque": "eu", "eu": "eu",
+    "icelandic": "is", "is": "is",
+    "armenian": "hy", "hy": "hy",
+    "nepali": "ne", "ne": "ne",
+    "mongolian": "mn", "mn": "mn",
+    "bosnian": "bs", "bs": "bs",
+    "kazakh": "kk", "kk": "kk",
+    "albanian": "sq", "sq": "sq",
+    "swahili": "sw", "sw": "sw",
+}
 
 def setup_logging():
-    """Configure logging settings"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -20,45 +84,101 @@ def setup_logging():
     )
 
 def get_device():
-    """Determine the best available device for computation"""
-    return "cpu"  # Forcing CPU for reliability
+    return "cpu"
+
+def get_formatted_language_list():
+    unique_langs = sorted(set(lang for lang in LANGUAGE_CODES.keys() if len(lang) > 2))
+    lang_columns = textwrap.fill(", ".join(unique_langs), width=70, initial_indent="  ", subsequent_indent="  ")
+    return f"Available languages:\n{lang_columns}"
+
+def validate_language(lang: str) -> str:
+    if not lang:
+        return None
+        
+    lang = lang.lower()
+    if lang in LANGUAGE_CODES:
+        return LANGUAGE_CODES[lang]
+    else:
+        valid_languages = sorted(set(code for code in LANGUAGE_CODES.keys() if len(code) > 2))
+        raise ValueError(f"Unsupported language: {lang}\nSupported languages: {', '.join(valid_languages)}")
 
 def parse_arguments():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Transcribe audio files using Whisper-small model')
+    parser = argparse.ArgumentParser(
+        description='Transcribe audio files using Whisper-small model',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"""
+Examples:
+  whisper -i audio.mp3                             # Basic usage with defaults
+  whisper -i audio.mp3 -o ~/transcripts            # Specify output directory
+  whisper -i audio.mp3 -l french                   # Transcribe French audio
+  whisper -i audio.mp3 --chunk-length 45           # Custom chunk length
+  whisper -i audio.mp3 -cln 45                     # Same as above
+  whisper -i audio.mp3 --chunkless                 # Process as single chunk
+  whisper -i audio.mp3 -cls                        # Same as above
+  whisper --default-language spanish               # Set Spanish as default
+
+{get_formatted_language_list()}
+
+Note: You can use either the full language name or its code (e.g., 'french' or 'fr')""")
+    
     parser.add_argument('--input', '-i', type=str, required=True,
                        help='Path to input audio file')
     parser.add_argument('--output', '-o', type=str, default='.',
                        help='Path to output directory (defaults to current directory)')
-    parser.add_argument('--chunk-length', type=int, default=30,
+    parser.add_argument('--chunk-length', '-cln', type=int, default=30,
                        help='Length of audio chunks in seconds (default: 30)')
     parser.add_argument('--chunkless', '-cls', action='store_true',
                        help='Process the entire audio file as one chunk')
-    return parser.parse_args()
+    parser.add_argument('--language', '-l', type=str,
+                       help='Language of the audio (e.g., english, french, spanish)')
+    parser.add_argument('--default-language', type=str,
+                       help='Set default language for future transcriptions')
+    
+    args = parser.parse_args()
+    
+    try:
+        default_lang_file = os.path.expanduser('~/.whisper_default_language')
+        
+        if args.default_language:
+            lang_code = validate_language(args.default_language)
+            if lang_code:
+                with open(default_lang_file, 'w') as f:
+                    f.write(lang_code)
+                logging.info(f"Default language set to: {args.default_language} ({lang_code})")
+            return None
+            
+        if args.language:
+            args.language = validate_language(args.language)
+        elif os.path.exists(default_lang_file):
+            with open(default_lang_file, 'r') as f:
+                args.language = f.read().strip()
+                logging.info(f"Using default language: {args.language}")
+        else:
+            args.language = "en"
+            logging.info("No language specified, using English")
+            
+    except ValueError as e:
+        parser.error(str(e))
+        
+    return args
 
 def load_audio(audio_path):
-    """Load and preprocess audio file"""
     try:
         if not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
             
         logging.info(f"Loading audio file: {audio_path}")
         
-        # Get audio file information
         audio_info = sf.info(audio_path)
         logging.info(f"Audio file details: {audio_info}")
         
-        # Load audio with soundfile first to check if it's valid
         audio_sf, sr_orig = sf.read(audio_path)
         
-        # Convert to mono if stereo
         if len(audio_sf.shape) > 1:
             audio_sf = audio_sf.mean(axis=1)
         
-        # Resample to 16kHz using librosa
         audio = librosa.resample(audio_sf, orig_sr=sr_orig, target_sr=16000)
         
-        # Normalize audio
         audio = audio / np.max(np.abs(audio))
         
         duration = len(audio)/16000
@@ -71,16 +191,14 @@ def load_audio(audio_path):
         raise
 
 def split_audio(audio: np.ndarray, sample_rate: int, chunk_length: int) -> List[Tuple[np.ndarray, float, float]]:
-    """Split audio into chunks with timestamps"""
     chunk_length_samples = chunk_length * sample_rate
     chunks = []
     
     for i in range(0, len(audio), chunk_length_samples):
         chunk = audio[i:i + chunk_length_samples]
-        if len(chunk) < sample_rate:  # Skip chunks shorter than 1 second
+        if len(chunk) < sample_rate:
             continue
             
-        # Pad last chunk if needed
         if len(chunk) < chunk_length_samples:
             chunk = np.pad(chunk, (0, chunk_length_samples - len(chunk)))
             
@@ -90,8 +208,7 @@ def split_audio(audio: np.ndarray, sample_rate: int, chunk_length: int) -> List[
     
     return chunks
 
-def transcribe_chunk(chunk: np.ndarray, model, processor) -> str:
-    """Transcribe a single audio chunk"""
+def transcribe_chunk(chunk: np.ndarray, model, processor, language: str) -> str:
     input_features = processor(
         chunk, 
         sampling_rate=16000, 
@@ -100,7 +217,7 @@ def transcribe_chunk(chunk: np.ndarray, model, processor) -> str:
 
     predicted_ids = model.generate(
         input_features,
-        language="en",
+        language=language,
         task="transcribe",
         num_beams=5,
         max_new_tokens=225
@@ -114,40 +231,34 @@ def transcribe_chunk(chunk: np.ndarray, model, processor) -> str:
     return transcription
 
 def format_timestamp(seconds: float) -> str:
-    """Convert seconds to HH:MM:SS format"""
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     seconds = int(seconds % 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-def transcribe_audio_file(audio_path: str, use_chunks: bool = True, chunk_length: int = 30):
-    """Transcribe audio file with or without chunking"""
+def transcribe_audio_file(audio_path: str, use_chunks: bool = True, chunk_length: int = 30, language: str = "en"):
     try:
-        # Load model and processor
         logging.info("Loading Whisper model and processor...")
         processor = WhisperProcessor.from_pretrained("openai/whisper-small")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small").to(get_device())
         
-        # Load and preprocess audio
         audio, sr = load_audio(audio_path)
         
         if use_chunks:
-            # Process in chunks
             logging.info(f"Processing audio in {chunk_length}-second chunks...")
             chunks = split_audio(audio, sr, chunk_length)
             transcription = ""
-            total_chunks = len(chunks)
             
-            for i, (chunk, start_time, end_time) in enumerate(chunks, 1):
-                logging.info(f"Processing chunk {i}/{total_chunks}")
-                chunk_text = transcribe_chunk(chunk, model, processor)
-                start_stamp = format_timestamp(start_time)
-                end_stamp = format_timestamp(end_time)
-                transcription += f"[{start_stamp} --> {end_stamp}] {chunk_text}\n"
+            with tqdm(total=len(chunks), desc="Transcribing chunks") as pbar:
+                for chunk, start_time, end_time in chunks:
+                    chunk_text = transcribe_chunk(chunk, model, processor, language)
+                    start_stamp = format_timestamp(start_time)
+                    end_stamp = format_timestamp(end_time)
+                    transcription += f"[{start_stamp} --> {end_stamp}] {chunk_text}\n"
+                    pbar.update(1)
         else:
-            # Process entire file at once
             logging.info("Processing entire audio file as one chunk...")
-            transcription = transcribe_chunk(audio, model, processor)
+            transcription = transcribe_chunk(audio, model, processor, language)
         
         return transcription.strip()
 
@@ -156,7 +267,6 @@ def transcribe_audio_file(audio_path: str, use_chunks: bool = True, chunk_length
         raise
 
 def save_transcription(transcription: str, output_path: Path):
-    """Save transcription to text file"""
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(transcription)
@@ -166,30 +276,27 @@ def save_transcription(transcription: str, output_path: Path):
         raise
 
 def main():
-    """Main function to run the transcription pipeline"""
-    # Set up logging
     setup_logging()
     
-    # Parse arguments
     args = parse_arguments()
     
+    if args is None:
+        return
+        
     try:
-        # Create output directory if it doesn't exist
         output_dir = Path(args.output)
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Prepare output file path
         input_filename = Path(args.input).stem
         output_path = output_dir / f"{input_filename}_transcription.txt"
         
-        # Perform transcription
         transcription = transcribe_audio_file(
             args.input,
             use_chunks=not args.chunkless,
-            chunk_length=args.chunk_length
+            chunk_length=args.chunk_length,
+            language=args.language
         )
         
-        # Save result
         save_transcription(transcription, output_path)
         
         logging.info("Transcription completed successfully!")
