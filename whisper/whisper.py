@@ -12,6 +12,10 @@ import soundfile as sf
 from typing import List, Tuple
 from tqdm import tqdm
 import textwrap
+from moviepy.editor import VideoFileClip
+import tempfile
+
+VERSION = "1.1.0"
 
 LANGUAGE_CODES = {
     "english": "en", "en": "en",
@@ -76,6 +80,20 @@ LANGUAGE_CODES = {
     "swahili": "sw", "sw": "sw",
 }
 
+AVAILABLE_MODELS = {
+    "whisper-tiny": "openai/whisper-tiny",
+    "whisper-base": "openai/whisper-base",
+    "whisper-small": "openai/whisper-small",
+    "whisper-medium": "openai/whisper-medium",
+    "whisper-large": "openai/whisper-large",
+    "whisper-large-v2": "openai/whisper-large-v2",
+    "whisper-large-v3": "openai/whisper-large-v3",
+    "whisper-large-v3-turbo": "openai/whisper-large-v3-turbo"
+}
+
+VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
+AUDIO_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.wma', '.ogg', '.flac'}
+
 def setup_logging():
     logging.basicConfig(
         level=logging.INFO,
@@ -91,6 +109,11 @@ def get_formatted_language_list():
     lang_columns = textwrap.fill(", ".join(unique_langs), width=70, initial_indent="  ", subsequent_indent="  ")
     return f"Available languages:\n{lang_columns}"
 
+def get_formatted_model_list():
+    models = list(AVAILABLE_MODELS.keys())
+    model_text = textwrap.fill(", ".join(models), width=70, initial_indent="  ", subsequent_indent="  ")
+    return f"Available models:\n{model_text}"
+
 def validate_language(lang: str) -> str:
     if not lang:
         return None
@@ -102,27 +125,98 @@ def validate_language(lang: str) -> str:
         valid_languages = sorted(set(code for code in LANGUAGE_CODES.keys() if len(code) > 2))
         raise ValueError(f"Unsupported language: {lang}\nSupported languages: {', '.join(valid_languages)}")
 
+def validate_model(model: str) -> str:
+    if not model:
+        return AVAILABLE_MODELS["whisper-small"]
+        
+    model = model.lower()
+    if model in AVAILABLE_MODELS:
+        return AVAILABLE_MODELS[model]
+    else:
+        raise ValueError(f"Unsupported model: {model}\nSupported models: {', '.join(AVAILABLE_MODELS.keys())}")
+
+def extract_audio_from_video(video_path: str) -> Tuple[np.ndarray, int]:
+    """Extract audio from video file and return as numpy array"""
+    logging.info("Extracting audio from video file...")
+    with VideoFileClip(video_path) as video:
+        # Create a temporary directory that will be automatically cleaned up
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_audio_path = os.path.join(temp_dir, "temp_audio.wav")
+            # Extract audio to temporary file
+            video.audio.write_audiofile(temp_audio_path, logger=None)
+            # Read the temporary audio file
+            audio, sr = sf.read(temp_audio_path)
+            return audio, sr
+
+def load_audio(file_path):
+    try:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+            
+        logging.info(f"Loading file: {file_path}")
+        
+        # Get file extension
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        # Handle video files
+        if file_ext in VIDEO_EXTENSIONS:
+            audio_sf, sr_orig = extract_audio_from_video(file_path)
+        # Handle audio files
+        elif file_ext in AUDIO_EXTENSIONS:
+            audio_info = sf.info(file_path)
+            logging.info(f"Audio file details: {audio_info}")
+            audio_sf, sr_orig = sf.read(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: {file_ext}")
+        
+        # Convert to mono if stereo
+        if len(audio_sf.shape) > 1:
+            audio_sf = audio_sf.mean(axis=1)
+        
+        # Resample to 16kHz using librosa
+        audio = librosa.resample(audio_sf, orig_sr=sr_orig, target_sr=16000)
+        
+        # Normalize audio
+        audio = audio / np.max(np.abs(audio))
+        
+        duration = len(audio)/16000
+        logging.info(f"Audio duration: {duration:.2f} seconds")
+        logging.info(f"Audio shape: {audio.shape}")
+        
+        return audio, 16000
+    except Exception as e:
+        logging.error(f"Error loading file: {e}")
+        raise
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description='Transcribe audio files using Whisper-small model',
+        description=f'Whisper Audio/Video Transcription Tool v{VERSION}',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Examples:
   whisper -i audio.mp3                             # Basic usage with defaults
+  whisper -i video.mp4                             # Transcribe video file
   whisper -i audio.mp3 -o ~/transcripts            # Specify output directory
   whisper -i audio.mp3 -l french                   # Transcribe French audio
+  whisper -i audio.mp3 -m whisper-large-v3         # Use specific model
   whisper -i audio.mp3 --chunk-length 45           # Custom chunk length
   whisper -i audio.mp3 -cln 45                     # Same as above
   whisper -i audio.mp3 --chunkless                 # Process as single chunk
   whisper -i audio.mp3 -cls                        # Same as above
   whisper --default-language spanish               # Set Spanish as default
+  whisper --default-model whisper-large-v3         # Set default model
+
+Supported formats:
+  Video: {', '.join(VIDEO_EXTENSIONS)}
+  Audio: {', '.join(AUDIO_EXTENSIONS)}
 
 {get_formatted_language_list()}
 
+{get_formatted_model_list()}
+
 Note: You can use either the full language name or its code (e.g., 'french' or 'fr')""")
-    
-    parser.add_argument('--input', '-i', type=str, required=True,
-                       help='Path to input audio file')
+parser.add_argument('--input', '-i', type=str, required=True,
+                       help='Path to input audio/video file')
     parser.add_argument('--output', '-o', type=str, default='.',
                        help='Path to output directory (defaults to current directory)')
     parser.add_argument('--chunk-length', '-cln', type=int, default=30,
@@ -131,13 +225,18 @@ Note: You can use either the full language name or its code (e.g., 'french' or '
                        help='Process the entire audio file as one chunk')
     parser.add_argument('--language', '-l', type=str,
                        help='Language of the audio (e.g., english, french, spanish)')
+    parser.add_argument('--model', '-m', type=str,
+                       help='Model to use for transcription')
     parser.add_argument('--default-language', type=str,
                        help='Set default language for future transcriptions')
+    parser.add_argument('--default-model', type=str,
+                       help='Set default model for future transcriptions')
     
     args = parser.parse_args()
     
     try:
         default_lang_file = os.path.expanduser('~/.whisper_default_language')
+        default_model_file = os.path.expanduser('~/.whisper_default_model')
         
         if args.default_language:
             lang_code = validate_language(args.default_language)
@@ -147,6 +246,14 @@ Note: You can use either the full language name or its code (e.g., 'french' or '
                 logging.info(f"Default language set to: {args.default_language} ({lang_code})")
             return None
             
+        if args.default_model:
+            model_path = validate_model(args.default_model)
+            if model_path:
+                with open(default_model_file, 'w') as f:
+                    f.write(model_path)
+                logging.info(f"Default model set to: {args.default_model}")
+            return None
+
         if args.language:
             args.language = validate_language(args.language)
         elif os.path.exists(default_lang_file):
@@ -156,39 +263,22 @@ Note: You can use either the full language name or its code (e.g., 'french' or '
         else:
             args.language = "en"
             logging.info("No language specified, using English")
+
+        if args.model:
+            args.model = validate_model(args.model)
+        elif os.path.exists(default_model_file):
+            with open(default_model_file, 'r') as f:
+                args.model = f.read().strip()
+                model_name = next(k for k, v in AVAILABLE_MODELS.items() if v == args.model)
+                logging.info(f"Using default model: {model_name}")
+        else:
+            args.model = AVAILABLE_MODELS["whisper-small"]
+            logging.info("No model specified, using whisper-small")
             
     except ValueError as e:
         parser.error(str(e))
         
     return args
-
-def load_audio(audio_path):
-    try:
-        if not os.path.exists(audio_path):
-            raise FileNotFoundError(f"Audio file not found: {audio_path}")
-            
-        logging.info(f"Loading audio file: {audio_path}")
-        
-        audio_info = sf.info(audio_path)
-        logging.info(f"Audio file details: {audio_info}")
-        
-        audio_sf, sr_orig = sf.read(audio_path)
-        
-        if len(audio_sf.shape) > 1:
-            audio_sf = audio_sf.mean(axis=1)
-        
-        audio = librosa.resample(audio_sf, orig_sr=sr_orig, target_sr=16000)
-        
-        audio = audio / np.max(np.abs(audio))
-        
-        duration = len(audio)/16000
-        logging.info(f"Audio duration: {duration:.2f} seconds")
-        logging.info(f"Audio shape: {audio.shape}")
-        
-        return audio, 16000
-    except Exception as e:
-        logging.error(f"Error loading audio file: {e}")
-        raise
 
 def split_audio(audio: np.ndarray, sample_rate: int, chunk_length: int) -> List[Tuple[np.ndarray, float, float]]:
     chunk_length_samples = chunk_length * sample_rate
@@ -236,11 +326,11 @@ def format_timestamp(seconds: float) -> str:
     seconds = int(seconds % 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-def transcribe_audio_file(audio_path: str, use_chunks: bool = True, chunk_length: int = 30, language: str = "en"):
+def transcribe_audio_file(audio_path: str, use_chunks: bool = True, chunk_length: int = 30, language: str = "en", model_path: str = "openai/whisper-small"):
     try:
-        logging.info("Loading Whisper model and processor...")
-        processor = WhisperProcessor.from_pretrained("openai/whisper-small")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small").to(get_device())
+        logging.info(f"Loading {model_path}...")
+        processor = WhisperProcessor.from_pretrained(model_path)
+        model = WhisperForConditionalGeneration.from_pretrained(model_path).to(get_device())
         
         audio, sr = load_audio(audio_path)
         
@@ -294,7 +384,8 @@ def main():
             args.input,
             use_chunks=not args.chunkless,
             chunk_length=args.chunk_length,
-            language=args.language
+            language=args.language,
+            model_path=args.model
         )
         
         save_transcription(transcription, output_path)

@@ -1,8 +1,8 @@
 # Whisper Master CLI
-A whisper CLI  that uses [`whisper-small`](https://huggingface.co/openai/whisper-small) for all systems, built with Python, made with Claude 3.5 Sonnet (Oct. 2024 updated ver.)
+A whisper CLI  that uses any whisper model for all systems, built with Python, made with Claude 3.5 Sonnet (Oct. 2024 updated ver.)
 ## Setup
 ### Step 0
-You will need a working python enviroment and a good enough computer to run `whisper-small`.
+You will need a working python enviroment and a good enough computer to run whatever whisper model you're running.
 You will also need to install `torch transformers librosa numpy soundfile tqdm`
 ### Step 1
 Put the `whisper` folder in your home directory (the script is made for Mac, you can change where to look for the python file in the shell script).
@@ -27,39 +27,50 @@ When set up correctly, you can use `whisper` to use whisper on-device.
 Argument lists and examples written by AI.
 ### Required Arguments
 ```shell
---input PATH, -i PATH        Path to input audio file
+--input PATH, -i PATH        Path to input audio/video file
 ```
 ### Optinal Arguments
 ```shell
 --output PATH, -o PATH       Path to output directory (defaults to '.')
 --chunk-length N, -cln N     Length of audio chunks in seconds (defaults to 30)
---chunkless, -cls           Process the entire audio file as one chunk
+--chunkless, -cls           Process the entire file as one chunk
 --language LANG, -l LANG    Language of the audio (e.g., english, french, spanish)
+--model MODEL, -m MODEL     Model to use for transcription (e.g., whisper-large-v3)
 --default-language LANG     Set default language for future transcriptions
+--default-model MODEL       Set default model for future transcriptions
 --help, -h                  Show help message and exit
 ```
 ### Examples
 ```shell
-# Basic usage (defaults to English)
+# Basic usage with defaults (whisper-small model)
 whisper -i audio.mp3
+
+# Process video file
+whisper -i video.mp4
+
+# Specify output directory
+whisper -i audio.mp3 -o ~/transcripts
+
+# Use specific model
+whisper -i audio.mp3 -m whisper-large-v3
 
 # Specify language
 whisper -i audio.mp3 -l french
-whisper -i audio.mp3 --language spanish
-
-# Set default language (saves to ~/.whisper_default_language)
-whisper --default-language french
 
 # Custom chunk length (two ways)
 whisper -i audio.mp3 --chunk-length 45
 whisper -i audio.mp3 -cln 45
 
-# Combine options
-whisper -i audio.mp3 -o ~/transcripts -l german -cln 45
-whisper -i audio.mp3 -o ~/transcripts -l french -cls
+# Process as single chunk
+whisper -i audio.mp3 --chunkless
+whisper -i audio.mp3 -cls
 
-# Show help with full language list
-whisper --help
+# Set default preferences
+whisper --default-language french
+whisper --default-model whisper-large-v3
+
+# Combine options
+whisper -i video.mp4 -o ~/transcripts -l german -m whisper-large-v3 -cln 45
 ```
 ### Supported Languages
 ```shell
@@ -72,4 +83,14 @@ albanian, arabic, armenian, azerbaijani, basque, bengali, bosnian,
   portuguese, romanian, russian, serbian, slovak, slovenian, spanish,
   swahili, swedish, tamil, telugu, thai, turkish, ukrainian, urdu,
   vietnamese, welsh
+```
+### Supported File Formats
+```shell
+Video: .mp4, .avi, .mov, .mkv, .webm
+Audio: .mp3, .wav, .m4a, .wma, .ogg, .flac
+```
+### Available Models
+```shell
+whisper-tiny, whisper-base, whisper-small (default), whisper-medium, whisper-large, 
+whisper-large-v2, whisper-large-v3, whisper-large-v3-turbo
 ```
