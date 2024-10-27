@@ -1,4 +1,4 @@
-![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat-square&logo=buy-me-a-coffee&logoColor=black)
+[![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat-square&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/lazerthings)
 # Whisper Master CLI
 A whisper CLI  that uses any whisper model for all systems, built with Python, made with Claude 3.5 Sonnet (Oct. 2024 updated ver.)
 ## Setup
