@@ -1,5 +1,6 @@
 # Whisper Master CLI
 A whisper CLI  that uses any whisper model for all systems, built with Python, made with Claude 3.5 Sonnet (Oct. 2024 updated ver.)
+<script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="lazerthings" data-color="#40DCA5" data-emoji="🍫"  data-font="Inter" data-text="Buy me a candy bar" data-outline-color="#000000" data-font-color="#ffffff" data-coffee-color="#FFDD00" ></script>
 ## Setup
 ### Step 0
 You will need a working python enviroment and a good enough computer to run whatever whisper model you're running.
