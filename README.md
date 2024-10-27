@@ -1,6 +1,6 @@
+![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat-square&logo=buy-me-a-coffee&logoColor=black)
 # Whisper Master CLI
 A whisper CLI  that uses any whisper model for all systems, built with Python, made with Claude 3.5 Sonnet (Oct. 2024 updated ver.)
-![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)
 ## Setup
 ### Step 0
 You will need a working python enviroment and a good enough computer to run whatever whisper model you're running.
